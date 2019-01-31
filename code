@@ -1,1 +1,66 @@
 
+library(data.table)
+
+
+setwd("C:\\02 Personal\\R Model")
+
+df<-data.table(read.csv('test_v0.1_AA.csv'))
+table(df$total.person.income)
+
+##df$event <-if(df$total.person.income==" 50000+."){1}else{0}
+df$event <-ifelse(df$total.person.income==" 50000+.",1,0)
+
+table(df$event)
+
+dm <-dim(df)
+
+event_rate<- sum(df$event)/nrow(df)
+mean(df$event)
+
+print(event_rate)
+
+write.csv(sapply(df,function(x) sum(is.na(x))),"missing.csv")
+
+
+write.csv(summary(df),"summary.csv")
+df[,sapply(df,class)=='factor']
+
+df2<- df[,sapply(df,class)=='factor']
+write.csv(table(),"table.csv")
+class(df)
+table(df$instance.weight)
+
+library(caTools)
+
+
+install.packages("dummies")
+library(dummies)
+df_dummy<-dummy.data.frame(df,sep=".")
+names(df_dummy)
+head(df_dummy)
+names(df_dummy) <- gsub(" ","_",names(df_dummy))
+names(df_dummy) <- gsub("-","_",names(df_dummy))
+names(df_dummy) <- gsub("/","_",names(df_dummy))
+names(df_dummy) <- gsub("\\(","_",names(df_dummy))
+names(df_dummy) <- gsub(")","_",names(df_dummy))
+names(df_dummy) <- gsub("&","_",names(df_dummy))
+names(df_dummy) <- gsub("\\+","",names(df_dummy))
+names(df_dummy) <- gsub("_","",names(df_dummy))
+names(df_dummy) <- gsub("\\?","",names(df_dummy))
+names(df_dummy) <- gsub("<","",names(df_dummy))
+
+
+## split the data
+
+rand <- sample.split(df_dummy$event,SplitRatio = 0.20)
+train<-subset(df_dummy,rand==TRUE)
+test<-subset(df_dummy,rand==FALSE)
+
+install.packages("randomForest")
+library(randomForest)
+model1<-randomForest(event ~ .,data=train,na.action=na.omit,ntree=200)
+# To check important variables
+importance(model2)        
+varImpPlot(model2)        
+
+
