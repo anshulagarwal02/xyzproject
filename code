@@ -1,43 +1,74 @@
 
+########################################
+# Installing and importing libraries
+########################################
+
 library(data.table)
-
-
-setwd("C:\\02 Personal\\R Model")
-
-df<-data.table(read.csv('test_v0.1_AA.csv'))
-table(df$total.person.income)
-
-##df$event <-if(df$total.person.income==" 50000+."){1}else{0}
-df$event <-ifelse(df$total.person.income==" 50000+.",1,0)
-
-table(df$event)
-
-dm <-dim(df)
-
-event_rate<- sum(df$event)/nrow(df)
-mean(df$event)
-
-print(event_rate)
-
-write.csv(sapply(df,function(x) sum(is.na(x))),"missing.csv")
-
-
-write.csv(summary(df),"summary.csv")
-df[,sapply(df,class)=='factor']
-
-df2<- df[,sapply(df,class)=='factor']
-write.csv(table(),"table.csv")
-class(df)
-table(df$instance.weight)
-
 library(caTools)
-
 
 install.packages("dummies")
 library(dummies)
-df_dummy<-dummy.data.frame(df,sep=".")
-names(df_dummy)
-head(df_dummy)
+
+install.packages("randomForest")
+library(randomForest)
+
+install.packages("caret")
+library(caret)
+
+install.packages("ROCR")
+library(ROCR)
+
+#Setting desktop path
+setwd("C:\\02 Personal\\R Model")
+
+#Importing the data file
+df<-data.table(read.csv('bank-full.csv',header = TRUE,sep = ";"))
+head(df)
+
+#Calculating Event Rate
+table(df$y)
+df$event <-ifelse(df$y=="yes",1,0)
+
+table(df$event)
+
+#Printing the Event Rate
+event_rate<- sum(df$event)/nrow(df)
+print(event_rate)
+mean(df$event)
+
+#Checking Missing Values for NaN or Not Answer
+select rows where v1 is 99 and recode column v1 
+df[df=="unknown"] <- NA
+
+
+
+missing_value <- sapply(df,function(x) sum(is.na(x)))
+missing_value <- data.frame(missing_value)
+
+missing_value$miss_perc <- (missing_value/nrow(df))*100
+missing_value <- missing_value[order(-missing_value$miss_perc),]
+print(missing_value)
+
+
+## drop missing values and missing rows with NA
+data_1 <- subset(data, var != "NA")
+drops<-c("poutcome,contact")
+#df<-as.data.table(df)
+test_drop<- df[,!(names(df) %in% drops)]
+
+test_drops
+
+write.csv(missing_value,"missing.csv")
+
+
+write.csv(summary(df),"summary.csv")
+
+#dataframe excluding y variable
+df2<- df[,!c("y")]
+str(df2)
+
+#creating dummy variables
+df_dummy<-dummy.data.frame(df2,sep=".")
 names(df_dummy) <- gsub(" ","_",names(df_dummy))
 names(df_dummy) <- gsub("-","_",names(df_dummy))
 names(df_dummy) <- gsub("/","_",names(df_dummy))
@@ -49,18 +80,78 @@ names(df_dummy) <- gsub("_","",names(df_dummy))
 names(df_dummy) <- gsub("\\?","",names(df_dummy))
 names(df_dummy) <- gsub("<","",names(df_dummy))
 
+names(df_dummy)
+head(df_dummy)
+
 
 ## split the data
+df_dummy$event<-as.factor(df_dummy$event)
 
-rand <- sample.split(df_dummy$event,SplitRatio = 0.20)
+rand <- sample.split(df_dummy$event,SplitRatio = 0.70)
 train<-subset(df_dummy,rand==TRUE)
 test<-subset(df_dummy,rand==FALSE)
 
-install.packages("randomForest")
-library(randomForest)
+str(train)
+
+
+#Buidling random forest model
+set.seed(300)
 model1<-randomForest(event ~ .,data=train,na.action=na.omit,ntree=200)
+
 # To check important variables
-importance(model2)        
-varImpPlot(model2)        
+model1
+importance(model1)        
+
+# Variable Importance Plot
+varImpPlot(model1
+           ,sort = T
+           ,main="Variable Importance"
+           ,n.var=50)
+
+#take top N variables
+importanceOrder=order(-model1$importance)
+names=rownames(-model1$importance)[importanceOrder][1:15]
+names <- c(names)
+
+#train rf model using grid search and 15 variable
+#bestmtry <- tuneRF(train[-1], train[,1], stepFactor=1.5, improve=1e-5, ntree=500)
+#print(bestmtry)
 
 
+predValid <- predict(model1, test, type = "prob")
+predValid
+
+##test line
+predValid2<- as.factor(ifelse(predValid[,2]<=.5,0,1))
+
+
+table(predValid2,test$event)
+
+##new line
+pred <- prediction(predValid[,2],  test$event)
+
+
+ROC.perf <- performance(pred, "tpr", "fpr")
+plot (ROC.perf)
+abline(a=0, b= 1)
+
+#accuracy
+acc.perf = performance(pred, measure = "acc")
+plot(acc.perf)
+max(acc.perf@y.values[[1]])
+acc.perf@x.values[[1]]
+acc.perf@y.values[[1]][max(which(acc.perf@x.values[[1]] >= 0.5))]
+
+#AUC
+auc.perf = performance(pred, measure = "auc")
+xtemp<-auc.perf@y.values
+
+##gini
+Gini <- (2*unlist(xtemp) -1)
+
+
+#cutoffs
+cutoffs <- data.frame(cut=ROC.perf@alpha.values[[1]], fpr=ROC.perf@x.values[[1]], 
+                     tpr=ROC.perf@y.values[[1]])
+head(cutoffs)
+head(subset(cutoffs,fpr<.2))
